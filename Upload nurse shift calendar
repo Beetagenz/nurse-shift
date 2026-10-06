@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="manifest.json">
+<title>ตารางเวร</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#fff;color:#666;font-family:Arial,"Noto Sans Thai",sans-serif}
+.app{max-width:700px;margin:auto;min-height:100vh}
+.top{height:70px;display:grid;grid-template-columns:48px 1fr 48px;align-items:center;border-bottom:1px solid #ddd}
+.top button{border:0;background:#fff;font-size:31px;color:#777}.title{text-align:center;font-size:23px;font-weight:600}
+.name{display:inline-block;min-width:70px;color:#333;border-bottom:1px dashed #aaa;cursor:pointer}
+.controls{display:flex;justify-content:center;gap:8px;padding:9px;background:#fafafa;border-bottom:1px solid #ddd}
+select{padding:7px 10px;border:1px solid #ccc;border-radius:8px;font-size:16px}
+.week,.cal{display:grid;grid-template-columns:repeat(7,1fr)}.week{border-bottom:1px solid #ccc}
+.week div{text-align:center;padding:7px 1px;font-size:14px}.week div:first-child{color:#df8b91}.week div:last-child{color:#65bdd3}
+.day{min-height:108px;border-right:1px solid #ccc;border-bottom:1px solid #ccc;padding:5px;cursor:pointer}.day:nth-child(7n+1){border-left:1px solid #ccc}
+.empty{background:#fafafa;cursor:default}.num{font-size:21px}.sun .num{color:#df8b91}.sat .num{color:#65bdd3}
+.today{outline:3px solid #f2b34b;outline-offset:-3px}.shifts{text-align:center;margin-top:18px;font-size:18px;line-height:1.25}
+.off{color:#20a34a}.first,.second{color:#1769aa}.clinic{color:#b07a00}.rsh{color:#e36a9a}.ft{color:#7b3fb2}.cvt{color:#8b5a2b}
+.summary{text-align:center;padding:10px;border-top:1px solid #ddd;font-size:12px}
+.modal{position:fixed;inset:0;background:#0005;display:none;align-items:flex-end}.sheet{width:min(700px,100%);background:#fff;border-radius:18px 18px 0 0;padding:18px}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:8px}.opt{padding:12px;border:1px solid #ddd;border-radius:10px;background:#fafafa;font-size:17px}.active{border:2px solid #4b89dc;background:#eef5ff}
+.actions{display:flex;gap:8px;margin-top:12px}.actions button{flex:1;padding:12px;border:0;border-radius:10px;font-size:16px}.save{background:#4b89dc;color:#fff}.cancel{background:#eee}
+.nameModal{align-items:center;justify-content:center}.nameSheet{width:min(400px,90%);border-radius:16px;padding:20px;background:#fff}.nameSheet input{width:100%;padding:12px;border:1px solid #ccc;border-radius:9px;font-size:18px;margin:10px 0}
+@media(max-width:420px){.title{font-size:21px}.day{min-height:100px}.num{font-size:20px}.shifts{font-size:17px}}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="top">
+<button onclick="move(-1)">‹</button>
+<div class="title">ตารางเวรของ <span class="name" id="owner" onclick="openName()">ฉัน</span></div>
+<button onclick="move(1)">›</button>
+</div>
+<div class="controls"><select id="m" onchange="sel()"></select><select id="y" onchange="sel()"></select></div>
+<div class="week"><div>SUN</div><div>MON</div><div>TUE</div><div>WED</div><div>THU</div><div>FRI</div><div>SAT</div></div>
+<div id="cal" class="cal"></div><div id="sum" class="summary"></div>
+</div>
+
+<div id="modal" class="modal" onclick="if(event.target===this)closeM()"><div class="sheet">
+<h3 id="mt"></h3><div id="opts" class="opts"></div>
+<div class="actions"><button class="cancel" onclick="closeM()">ยกเลิก</button><button class="save" onclick="save()">บันทึก</button></div>
+</div></div>
+
+<div id="nameModal" class="modal nameModal" onclick="if(event.target===this)closeName()"><div class="nameSheet">
+<h3>ชื่อเจ้าของตารางเวร</h3><input id="nameInput" maxlength="40" placeholder="เช่น คุณสมชาย">
+<div class="actions"><button class="cancel" onclick="closeName()">ยกเลิก</button><button class="save" onclick="saveName()">บันทึก</button></div>
+</div></div>
+
+<script>
+const types=["Off","1st","2nd","Clinic","RSH","FT","CVT"];
+const months=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const th=["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
+let v=new Date(), data=JSON.parse(localStorage.getItem("nurseShiftData")||"{}"), owner=localStorage.getItem("nurseShiftOwner")||"ฉัน", day=null, chosen=[];
+function key(x){return v.getFullYear()+"-"+(v.getMonth()+1)+"-"+x}
+function cls(x){return x==="Off"?"off":x==="1st"?"first":x==="2nd"?"second":x==="Clinic"?"clinic":x==="RSH"?"rsh":x==="FT"?"ft":"cvt"}
+function setup(){m.innerHTML=months.map((x,i)=>`<option value="${i}">${x}</option>`).join("");y.innerHTML=Array.from({length:12},(_,i)=>`<option>${2024+i}</option>`).join("");m.value=v.getMonth();y.value=v.getFullYear();owner.textContent=ownerName()}
+function ownerName(){return owner}
+function render(){
+setup();let Y=v.getFullYear(),M=v.getMonth(),first=new Date(Y,M,1).getDay(),n=new Date(Y,M+1,0).getDate();cal.innerHTML="";
+for(let i=0;i<first;i++)cal.innerHTML+="<div class='day empty'></div>";
+for(let x=1;x<=n;x++){let q=document.createElement("div"),w=new Date(Y,M,x).getDay(),vals=data[key(x)]||[];q.className="day "+(w==0?"sun ":"")+(w==6?"sat ":"");let now=new Date;if(Y==now.getFullYear()&&M==now.getMonth()&&x==now.getDate())q.classList.add("today");q.innerHTML=`<div class=num>${x}</div><div class=shifts>${vals.map(z=>`<div class=${cls(z)}>${z}</div>`).join("")}</div>`;q.onclick=()=>openM(x);cal.appendChild(q)}
+let c=Object.fromEntries(types.map(x=>[x,0]));Object.keys(data).forEach(k=>{if(k.startsWith(Y+"-"+(M+1)+"-"))(data[k]||[]).forEach(x=>c[x]++)});
+sum.textContent=types.map(x=>x+" "+c[x]).join("  •  ")
+}
+function sel(){v.setMonth(+m.value);v.setFullYear(+y.value);render()}
+function move(n){v.setMonth(v.getMonth()+n);render()}
+function openM(x){day=x;chosen=[...(data[key(x)]||[])];mt.textContent=`วันที่ ${x} ${th[v.getMonth()]} ${v.getFullYear()+543}`;opts.innerHTML=types.map(x=>`<button class="opt ${chosen.includes(x)?"active":""}" onclick="toggle('${x}',this)">${x}</button>`).join("");modal.style.display="flex"}
+function toggle(x,b){chosen.includes(x)?chosen=chosen.filter(z=>z!==x):chosen.push(x);b.classList.toggle("active")}
+function save(){if(chosen.length)data[key(day)]=chosen;else delete data[key(day)];localStorage.setItem("nurseShiftData",JSON.stringify(data));closeM();render()}
+function closeM(){modal.style.display="none"}
+function openName(){nameInput.value=owner;nameModal.style.display="flex";setTimeout(()=>nameInput.focus(),50)}
+function saveName(){owner=(nameInput.value.trim()||"ฉัน");localStorage.setItem("nurseShiftOwner",owner);closeName();render()}
+function closeName(){nameModal.style.display="none"}
+render();if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");
+</script>
+</body></html>
+{"name":"ตารางเวรพยาบาล","short_name":"ตารางเวร","start_url":"./","display":"standalone","background_color":"#ffffff","theme_color":"#ffffff"}
+const C="nurse-shift-v1";self.addEventListener("install",e=>e.waitUntil(caches.open(C).then(c=>c.addAll(["./","./index.html","./manifest.json"]))));self.addEventListener("fetch",e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request))));
